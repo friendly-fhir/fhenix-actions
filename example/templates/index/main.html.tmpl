@@ -1,0 +1,9 @@
+<ul>
+{{ range .StructureDefinitions }}
+  <li>
+    <a href="{{ .Name | string.Snake }}.html" title="{{ .Name }}">
+      {{ .Name | string.Pascal }}
+    </a>
+  </li>
+{{ end }}
+</ul>

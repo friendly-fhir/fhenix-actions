@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Generate example Fhenix project
+
+on:
+  workflow_call:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Fhenix Project
+        uses: ./generate-project
+        with:
+          config: example/fhenix.yaml
+          output-dir: dist
