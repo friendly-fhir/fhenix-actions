@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   test:
-    name: Test
+    name: Generate HTML Example
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,3 +26,11 @@ jobs:
         with:
           config: example/fhenix.yaml
           output-dir: dist
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generate-html-example
+          path: ${{ github.workspace }}/example/dist
+          retention-days: 1
+          if-no-files-found: error
