@@ -1,0 +1,41 @@
+name: Generate Fhenix Project
+
+description: |
+  Run Fhenix generation on a set of user inputs
+
+author: Friendly FHIR
+branding:
+  color: yellow
+  icon: sunrise
+
+inputs:
+  config:
+    description: |
+      The configuration yaml file to use for running Fhenix generation.
+    required: true
+  output-dir:
+    description: |
+      The directory to output the results to, if it's not specified in the
+      configuration file.
+    required: false
+  root-dir:
+    description: |
+      The root directory to use for resolving relative paths in the configuration
+      file. If not specified, the root directory will be the same directory as the
+      configuration file.
+
+      This should typically only be used if the configuration file is kept in a
+      directory separate from the files it references, but otherwise makes it
+      more difficult to trace the configuration file's dependencies.
+    required: false
+
+runs:
+  using: docker
+  image: docker://ghcr.io/friendly-fhir/fhenix:latest
+  args:
+    - run
+    - ${{ inputs.config }}
+    - --output
+    - ${{ inputs.output-dir }}
+    - --root
+    - ${{ inputs.root-dir }}
