@@ -15,3 +15,6 @@ jobs:
   test-generate-example:
     name: Generate Example
     uses: ./.github/workflows/test-generate-example.yaml
+  test-setup-fhenix:
+    name: Setup Fhenix
+    uses: ./.github/workflows/test-setup-fhenix.yaml

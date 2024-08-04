@@ -1,0 +1,72 @@
+name: Setup Fhenix
+description: >-
+  An action for setting up the `fhenix` binary in the caller's environment.
+  This does not produce a docker image -- but rather it directly installs it
+  and ensures it is runnable in the caller's environment.
+author: Friendly FHIR
+branding:
+  color: yellow
+  icon: sunrise
+
+inputs:
+  version:
+    description: >-
+      The version to explicitly install. If not specified, will always pull the
+      latest version.
+    required: false
+    default: ''
+  install-dir:
+    description: >-
+      The directory to install the `fhenix` binary to. If not specified, will
+      create a temporary directory for this.
+    required: false
+    default: ''
+outputs:
+  install-dir:
+    description: >-
+      The directory containing the `fhenix` binary. This will already have been
+      added to $PATH automatically by running this action, but is provided here
+      for convenience of chaining actions.
+    value: ${{ steps.install.outputs.install-dir }}
+  binary:
+    description: >-
+      The directory containing the `fhenix` binary. This should be added to the
+      `PATH` environment variable to ensure it is accessible.
+    value: ${{ steps.install.outputs.binary }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install fhenix version ${{ inputs.version || 'latest' }}
+      id: install
+      if: ${{ inputs.version == '' }}
+      shell: bash
+      run: |
+        tmpdir=$(cd "${{ runner.temp }}"; pwd)
+        if [[ -z "${{ inputs.install-dir }}" ]]; then
+          bindir="${tmpdir}/bin"
+        else
+          bindir="${{ inputs.install-dir }}"
+        fi
+
+        mkdir -p "${bindir}"
+        curl                                                                            \
+          -sSL https://raw.githubusercontent.com/friendly-fhir/fhenix/master/install.sh \
+          -o "${tmpdir}/install.sh"
+        chmod +x "${tmpdir}/install.sh"
+
+        function winpath() {
+          echo "$@" | sed -e 's@^/\([a-z]\)/@\1:\\\\@' | sed 's@/@\\@g'
+        }
+
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          winpath "${bindir}" >> "${GITHUB_PATH}"
+          echo install-dir=$(winpath "${bindir}")       >> "${GITHUB_OUTPUT}"
+          echo binary=$(winpath "${bindir}/fhenix.exe") >> "${GITHUB_OUTPUT}"
+        else
+          echo "${bindir}" >> "${GITHUB_PATH}"
+          echo "install-dir=${bindir}"   >> "${GITHUB_OUTPUT}"
+          echo "binary=${bindir}/fhenix" >> "${GITHUB_OUTPUT}"
+        fi
+        "${tmpdir}/install.sh" -b "${bindir}" "${{ inputs.version}}"
+        echo "${bindir}" >> "${GITHUB_PATH}"

@@ -3,9 +3,6 @@ name: Generate example Fhenix project
 
 on:
   workflow_call:
-  pull_request:
-    branches:
-      - master
 
 permissions:
   contents: read
