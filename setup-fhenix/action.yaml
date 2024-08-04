@@ -63,17 +63,17 @@ outputs:
       The directory containing the `fhenix` binary. This will already have been
       added to $PATH automatically by running this action, but is provided here
       for convenience of chaining actions.
-    value: ${{ steps.install.outputs.install-dir }}
+    value: ${{ steps.output.outputs.install-dir }}
   cache-dir:
     description: |
       The directory that will contain the cached FHIR IG packages. Typically
       this is $HOME/.cache/fhenix (following the XDG Base Directory Specification).
-    value: ${{ steps.install.outputs.cache-dir }}
+    value: ${{ steps.output.outputs.cache-dir }}
   config-dir:
     description: |
       The directory containing the configuration files for fhenix. Typically
       this is $HOME/.cache/fhenix (following the XDG Base Directory Specification).
-    value: ${{ steps.install.outputs.config-dir }}
+    value: ${{ steps.output.outputs.config-dir }}
   binary:
     description: |
       An absolute path to the installed fhenix binary. This will be in the
@@ -82,7 +82,7 @@ outputs:
 
       Use of this output is not strictly required, since the PATH will also
       be updated to include the directory containing this binary.
-    value: ${{ steps.install.outputs.binary }}
+    value: ${{ steps.output.outputs.binary }}
 
 runs:
   using: composite
@@ -136,9 +136,8 @@ runs:
 
         mkdir -p "${installdir}" "${cachedir}" "${configdir}"
 
-    - name: Install fhenix version ${{ inputs.version || 'latest' }}
+    - name: Install fhenix ${{ inputs.version || 'latest' }}
       id: install
-      if: ${{ inputs.version == '' }}
       shell: bash
       run: |
         tmpdir=${{ steps.paths.outputs.tmp-dir }}
@@ -180,7 +179,7 @@ runs:
     - name: Set Environment Variables
       shell: bash
       run: |
-        echo "FHENIX_CACHE_DIR=${{ steps.output.outputs.cache-dir }}" >> "${GITHUB_ENV}"
+        echo "FHENIX_CACHE_DIR=${{ steps.output.outputs.cache-dir }}"   >> "${GITHUB_ENV}"
         echo "FHENIX_CONFIG_DIR=${{ steps.output.outputs.config-dir }}" >> "${GITHUB_ENV}"
 
     - name: Update $PATH
