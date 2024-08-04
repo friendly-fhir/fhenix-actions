@@ -33,3 +33,15 @@ jobs:
       - name: Check binary (Windows)
         if: ${{ matrix.runner == 'windows-latest' }}
         run: fhenix.exe
+
+      - name: Check environment variables
+        shell: bash
+        run: |
+          if [[ -z "${FHENIX_CACHE_DIR}" ]]; then
+            echo "FHENIX_CACHE_DIR is not set"
+            exit 1
+          fi
+          if [[ -z "${FHENIX_CONFIG_DIR}" ]]; then
+            echo "FHENIX_CONFIG_DIR is not set"
+            exit 1
+          fi

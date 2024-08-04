@@ -1,8 +1,17 @@
 name: Setup Fhenix
-description: >-
+description: |
   An action for setting up the `fhenix` binary in the caller's environment.
+
   This does not produce a docker image -- but rather it directly installs it
-  and ensures it is runnable in the caller's environment.
+  and ensures it is runnable in the caller's environment by an unqualified
+  call to `fhenix` or `fhenix.exe` (on Windows).
+
+  This action honors the XDG Base Directory Specification for cache and config
+  directories, and enables overriding these directories with inputs as needed.
+
+  If not set prior to running this, the environment variables for `FHENIX_CACHE_DIR`
+  and `FHENIX_CONFIG_DIR` will be set to the cache and config directories used
+  by this action respectively.
 author: Friendly FHIR
 branding:
   color: yellow
@@ -16,9 +25,36 @@ inputs:
     required: false
     default: ''
   install-dir:
-    description: >-
-      The directory to install the `fhenix` binary to. If not specified, will
-      create a temporary directory for this.
+    description: |
+      The directory to install the `fhenix` binary to.
+
+      If not specified, will create a temporary directory in the `runner.temp`
+      directory.
+      The directory used will be marked as an output of this action.
+    required: false
+    default: ''
+  cache-dir:
+    description: |
+      The directory containing the cached FHIR IG packages. Typically this is
+      $HOME/.cache/fhenix (following the XDG Base Directory Specification).
+
+      If not specified, this will do the following:
+      - Check for the environment variable `FHENIX_CACHE_DIR` and use that if specified
+      - Check for the environment variable `XDG_CACHE_HOME` and use that if specified
+      - Otherwise, will create a cache directory in the `runner.temp` directory
+      The directory used will be marked as an output of this action.
+    required: false
+    default: ''
+  config-dir:
+    description: |
+      The directory containing the cached FHIR IG packages. Typically this is
+      $HOME/.cache/fhenix (following the XDG Base Directory Specification).
+
+      If not specified, this will do the following:
+      - Check for the environment variable `FHENIX_CONFIG_DIR` and use that if specified
+      - Check for the environment variable `XDG_CONFIG_HOME` and use that if specified
+      - Otherwise, will create a cache directory in the `runner.temp` directory
+      The directory used will be marked as an output of this action.
     required: false
     default: ''
 outputs:
@@ -28,20 +64,35 @@ outputs:
       added to $PATH automatically by running this action, but is provided here
       for convenience of chaining actions.
     value: ${{ steps.install.outputs.install-dir }}
+  cache-dir:
+    description: |
+      The directory that will contain the cached FHIR IG packages. Typically
+      this is $HOME/.cache/fhenix (following the XDG Base Directory Specification).
+    value: ${{ steps.install.outputs.cache-dir }}
+  config-dir:
+    description: |
+      The directory containing the configuration files for fhenix. Typically
+      this is $HOME/.cache/fhenix (following the XDG Base Directory Specification).
+    value: ${{ steps.install.outputs.config-dir }}
   binary:
-    description: >-
-      The directory containing the `fhenix` binary. This should be added to the
-      `PATH` environment variable to ensure it is accessible.
+    description: |
+      An absolute path to the installed fhenix binary. This will be in the
+      canonical path format of the underlying runner (e.g. POSIX paths to a
+      binary on Linux, Windows paths to a .exe file on Windows).
+
+      Use of this output is not strictly required, since the PATH will also
+      be updated to include the directory containing this binary.
     value: ${{ steps.install.outputs.binary }}
 
 runs:
   using: composite
   steps:
-    - name: Install fhenix version ${{ inputs.version || 'latest' }}
-      id: install
-      if: ${{ inputs.version == '' }}
+    - name: Identify paths
+      id: paths
       shell: bash
       run: |
+        # Normalize the temporary directory to an absolute POSIX path for this
+        # action.
         tmpdir=$(cd "${{ runner.temp }}"; pwd)
         if [[ -z "${{ inputs.install-dir }}" ]]; then
           bindir="${tmpdir}/bin"
@@ -49,24 +100,90 @@ runs:
           bindir="${{ inputs.install-dir }}"
         fi
 
-        mkdir -p "${bindir}"
+        # Cache directory
+        if [[ ! -z "${{ inputs.cache-dir }}" ]]; then
+          cachedir="${{ inputs.cache-dir }}"
+        elif [[ ! -z "${FHENIX_CACHE_DIR}" ]]; then
+          cachedir="${FHENIX_CACHE_DIR}"
+        elif [[ ! -z "${XDG_CACHE_HOME}" ]]; then
+          cachedir="${XDG_CACHE_HOME}/fhenix"
+        else
+          cachedir="${tmpdir}/cache/fhenix"
+        fi
+
+        # Configuration directory
+        if [[ ! -z "${{ inputs.config-dir }}" ]]; then
+          configdir="${{ inputs.config-dir }}"
+        elif [[ ! -z "${FHENIX_CONFIG_DIR}" ]]; then
+          configdir="${FHENIX_CONFIG_DIR}"
+        elif [[ ! -z "${XDG_CONFIG_HOME}" ]]; then
+          configdir="${XDG_CONFIG_HOME}/fhenix"
+        else
+          configdir="${tmpdir}/config/fhenix"
+        fi
+
+        echo "tmp-dir=${tmpdir}"       >> "${GITHUB_OUTPUT}"
+        echo "install-dir=${bindir}"   >> "${GITHUB_OUTPUT}"
+        echo "cache-dir=${cachedir}"   >> "${GITHUB_OUTPUT}"
+        echo "config-dir=${configdir}" >> "${GITHUB_OUTPUT}"
+
+    - name: Create fhenix directories
+      shell: bash
+      run: |
+        installdir="${{ steps.paths.outputs.install-dir }}"
+        cachedir="${{ steps.paths.outputs.cache-dir }}"
+        configdir="${{ steps.paths.outputs.config-dir }}"
+
+        mkdir -p "${installdir}" "${cachedir}" "${configdir}"
+
+    - name: Install fhenix version ${{ inputs.version || 'latest' }}
+      id: install
+      if: ${{ inputs.version == '' }}
+      shell: bash
+      run: |
+        tmpdir=${{ steps.paths.outputs.tmp-dir }}
+        installdir=${{ steps.paths.outputs.install-dir }}
+
         curl                                                                            \
           -sSL https://raw.githubusercontent.com/friendly-fhir/fhenix/master/install.sh \
           -o "${tmpdir}/install.sh"
         chmod +x "${tmpdir}/install.sh"
 
+        "${tmpdir}/install.sh" -b "${installdir}" ${{ inputs.version }}
+
+    - name: Create Outputs
+      id: output
+      shell: bash
+      run: |
+        # Convert an absolute POSIX MinGW path to a Windows path
         function winpath() {
           echo "$@" | sed -e 's@^/\([a-z]\)/@\1:\\\\@' | sed 's@/@\\@g'
         }
 
+        installdir=${{ steps.paths.outputs.install-dir }}
+        cachedir=${{ steps.paths.outputs.cache-dir }}
+        configdir=${{ steps.paths.outputs.config-dir }}
+        binary="${installdir}/fhenix"
+
         if [[ "${{ runner.os }}" == "Windows" ]]; then
-          winpath "${bindir}" >> "${GITHUB_PATH}"
-          echo install-dir=$(winpath "${bindir}")       >> "${GITHUB_OUTPUT}"
-          echo binary=$(winpath "${bindir}/fhenix.exe") >> "${GITHUB_OUTPUT}"
-        else
-          echo "${bindir}" >> "${GITHUB_PATH}"
-          echo "install-dir=${bindir}"   >> "${GITHUB_OUTPUT}"
-          echo "binary=${bindir}/fhenix" >> "${GITHUB_OUTPUT}"
+          installdir=$(winpath "${installdir}")
+          cachedir=$(winpath "${cachedir}")
+          configdir=$(winpath "${configdir}")
+          binary=$(winpath "${installdir}/fhenix.exe")
         fi
-        "${tmpdir}/install.sh" -b "${bindir}" "${{ inputs.version}}"
-        echo "${bindir}" >> "${GITHUB_PATH}"
+
+        echo "install-dir=${installdir}" >> "${GITHUB_OUTPUT}"
+        echo "cache-dir=${cachedir}"     >> "${GITHUB_OUTPUT}"
+        echo "config-dir=${configdir}"   >> "${GITHUB_OUTPUT}"
+        echo "binary=${binary}"          >> "${GITHUB_OUTPUT}"
+
+    - name: Set Environment Variables
+      shell: bash
+      run: |
+        echo "FHENIX_CACHE_DIR=${{ steps.output.outputs.cache-dir }}" >> "${GITHUB_ENV}"
+        echo "FHENIX_CONFIG_DIR=${{ steps.output.outputs.config-dir }}" >> "${GITHUB_ENV}"
+
+    - name: Update $PATH
+      shell: bash
+      run: |
+        echo "${{ steps.output.outputs.install-dir }}" >> "${GITHUB_PATH}"
